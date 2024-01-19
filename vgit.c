@@ -7,6 +7,10 @@
 int init(void);
 int doesFolderExist(char *);
 void MainSettings(void);
+void globalNameConfig(const char * New_Value);
+void globalEmailConfig(const char * New_Value);
+void projectsGlobalConfig();
+
 
 // constant values
 const char settingsFolder[]="C:\\Users\\admin\\Desktop\\settings";
@@ -32,9 +36,12 @@ int main(int argc, char const *argv[])
     else if(strcmp(argv[0],"vgit")==0 &&strcmp(argv[1],"config")==0 && strcmp(argv[2],"--global")==0){
         if (strcmp(argv[3],"user.name")==0)
         {
-
-        }else if(strcmp(argv[3],"user.email")==0){
-
+            globalNameConfig(argv[4]);
+            projectsGlobalConfig();
+        }
+        else if(strcmp(argv[3],"user.email")==0){
+            globalEmailConfig(argv[4]);
+            projectsGlobalConfig();
         }
         
     }
@@ -44,6 +51,81 @@ int main(int argc, char const *argv[])
     }
 
     return 0;
+}
+
+// global config
+void globalNameConfig(const char * New_Value){
+
+    char prevSettings[2][1024];
+
+    file=fopen(settingsFilePath,"r");
+    fgets(prevSettings[0],1024,file);
+    fgets(prevSettings[1],1024,file);
+    fclose(file);
+
+    file=fopen(settingsFilePath,"w");
+    fprintf(file,"UserName : %s\n",New_Value);
+    fputs(prevSettings[1],file);
+    fclose(file);
+}
+
+void globalEmailConfig(const char * New_Value){
+
+    char prevSettings[2][1024];
+
+    file=fopen(settingsFilePath,"r");
+    fgets(prevSettings[0],1024,file);
+    fgets(prevSettings[1],1024,file);
+    fclose(file);
+
+    file=fopen(settingsFilePath,"w");
+    fputs(prevSettings[0],file);
+    fprintf(file,"UserEmail : %s\n",New_Value);
+    fclose(file);
+}
+
+void projectsGlobalConfig(){
+    
+    int repoCount=0,ch=0;
+    char projects[1024][1024];
+    
+    file=fopen(projectsFilePath,"r");
+    do{
+        ch=fgetc(file);
+        if (ch == '\n')
+        {
+            repoCount++;
+        }
+    }while(ch!=EOF);
+    fclose(file);
+    repoCount++;
+
+    file=fopen(projectsFilePath,"r");
+    for(int i=0;i<repoCount;i++){
+        fgets(projects[i],1024,file);
+        projects[i][strlen(projects[i])]='\0';        
+    }
+    fclose(file);
+    
+
+    for (int i = 0; i < repoCount; i++)
+    {
+
+        char tempRepoSettingsPath[1024];
+        sprintf(tempRepoSettingsPath,"%s\\settings.txt",projects[i]);
+
+        char Data[2][1024];
+        file=fopen(settingsFilePath,"r");
+        fgets(Data[0],1024,file);
+        fgets(Data[1],1024,file);
+        fclose(file);
+
+
+        file=fopen(tempRepoSettingsPath,"w");
+        fputs(Data[0],file);
+        fputs(Data[1],file);
+        fclose(file);   
+    }
 }
 
 // vgit main settings
@@ -92,6 +174,24 @@ int init()
         system("attrib +H .vgit");
         printf("Initialized empty Git repository successfully :)");
     }
+
+        char repoFullAddrress[1024];
+        sprintf(repoFullAddrress,"%s\\%s",currentDir,".vgit");
+
+        char reposettingsAddrress[1024];
+        sprintf(reposettingsAddrress,"%s\\%s",repoFullAddrress,"settings.txt");
+
+
+        // creating settings.txt for repository
+        file=fopen(reposettingsAddrress,"w");
+        fprintf(file,"");
+        fclose(file);
+
+
+        // save repo Full Address
+        file =fopen(projectsFilePath,"a");
+        fputs(repoFullAddrress,file);
+        fclose(file);
 }
 
 int doesFolderExist(char *folderName)
