@@ -10,12 +10,14 @@ void MainSettings(void);
 void globalNameConfig(const char * New_Value);
 void globalEmailConfig(const char * New_Value);
 void projectsGlobalConfig();
+void projectLocalNameConfig(char *,const char *);
+void projectLocalEmailConfig(char *,const char *);
 
 
 // constant values
 const char settingsFolder[]="C:\\Users\\admin\\Desktop\\settings";
-const char settingsFilePath[]="C:\\Users\\admin\\Desktop\\settings\\settings.txt";
-const char projectsFilePath[]="C:\\Users\\admin\\Desktop\\settings\\projects.txt";
+const char vgitMainSettings[]="C:\\Users\\admin\\Desktop\\settings\\settings.txt";
+const char vgitMainProjects[]="C:\\Users\\admin\\Desktop\\settings\\projects.txt";
 
 // global variables
 FILE * file;
@@ -42,8 +44,16 @@ int main(int argc, char const *argv[])
         else if(strcmp(argv[3],"user.email")==0){
             globalEmailConfig(argv[4]);
             projectsGlobalConfig();
+        }    
+    }
+    else if(strcmp(argv[0],"vgit")==0 &&strcmp(argv[1],"config")==0 )
+    {
+        if (strcmp(argv[2],"user.name")==0){
+            projectLocalNameConfig(workingDirectory,argv[3]);
         }
-        
+        else if(strcmp(argv[2],"user.email")==0){
+            projectLocalEmailConfig(workingDirectory,argv[3]);
+        }
     }
     else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "init") == 0)
     {
@@ -54,33 +64,33 @@ int main(int argc, char const *argv[])
 }
 
 // global config
-void globalNameConfig(const char * New_Value){
+void globalNameConfig(const char * NewValue){
 
     char prevSettings[2][1024];
 
-    file=fopen(settingsFilePath,"r");
+    file=fopen(vgitMainSettings,"r");
     fgets(prevSettings[0],1024,file);
     fgets(prevSettings[1],1024,file);
     fclose(file);
 
-    file=fopen(settingsFilePath,"w");
-    fprintf(file,"UserName : %s\n",New_Value);
+    file=fopen(vgitMainSettings,"w");
+    fprintf(file,"UserName : %s\n",NewValue);
     fputs(prevSettings[1],file);
     fclose(file);
 }
 
-void globalEmailConfig(const char * New_Value){
+void globalEmailConfig(const char * NewValue){
 
     char prevSettings[2][1024];
 
-    file=fopen(settingsFilePath,"r");
+    file=fopen(vgitMainSettings,"r");
     fgets(prevSettings[0],1024,file);
     fgets(prevSettings[1],1024,file);
     fclose(file);
 
-    file=fopen(settingsFilePath,"w");
+    file=fopen(vgitMainSettings,"w");
     fputs(prevSettings[0],file);
-    fprintf(file,"UserEmail : %s\n",New_Value);
+    fprintf(file,"UserEmail : %s\n",NewValue);
     fclose(file);
 }
 
@@ -89,7 +99,7 @@ void projectsGlobalConfig(){
     int repoCount=0,ch=0;
     char projects[1024][1024];
     
-    file=fopen(projectsFilePath,"r");
+    file=fopen(vgitMainProjects,"r");
     do{
         ch=fgetc(file);
         if (ch == '\n')
@@ -100,7 +110,7 @@ void projectsGlobalConfig(){
     fclose(file);
     repoCount++;
 
-    file=fopen(projectsFilePath,"r");
+    file=fopen(vgitMainProjects,"r");
     for(int i=0;i<repoCount;i++){
         fgets(projects[i],1024,file);
         projects[i][strlen(projects[i])]='\0';        
@@ -115,7 +125,7 @@ void projectsGlobalConfig(){
         sprintf(tempRepoSettingsPath,"%s\\settings.txt",projects[i]);
 
         char Data[2][1024];
-        file=fopen(settingsFilePath,"r");
+        file=fopen(vgitMainSettings,"r");
         fgets(Data[0],1024,file);
         fgets(Data[1],1024,file);
         fclose(file);
@@ -126,6 +136,43 @@ void projectsGlobalConfig(){
         fputs(Data[1],file);
         fclose(file);   
     }
+}
+
+void projectLocalNameConfig(char * workingDirectory,const char * NewValue){
+    char settingsPath[1024];
+    sprintf(settingsPath,"%s\\.vgit\\settings.txt",workingDirectory);
+
+    char prevSettings[2][1024];
+
+    file=fopen(settingsPath,"r");
+    fgets(prevSettings[0],1024,file);
+    fgets(prevSettings[1],1024,file);
+    fclose(file);
+
+    file=fopen(settingsPath,"w");
+    fprintf(file,"UserName : %s\n",NewValue);
+    fputs(prevSettings[1],file);
+    fclose(file);
+
+}
+
+void projectLocalEmailConfig(char * workingDirectory,const char * NewValue){
+    char settingsPath[1024];
+    sprintf(settingsPath,"%s\\.vgit\\settings.txt",workingDirectory);
+
+    char prevSettings[2][1024];
+
+    file=fopen(settingsPath,"r");
+    fgets(prevSettings[0],1024,file);
+    fgets(prevSettings[1],1024,file);
+    fclose(file);
+
+    file=fopen(settingsPath,"w");
+    fputs(prevSettings[0],file);
+    fprintf(file,"UserEmail : %s\n",NewValue);
+    
+    fclose(file);
+    
 }
 
 // vgit main settings
@@ -142,11 +189,12 @@ void MainSettings(){
 
         // creating settings.txt
         chdir(settingsFolder);
-        file =fopen(settingsFilePath,"w");
-        fprintf(file,"");
+        file =fopen(vgitMainSettings,"w");
+        fprintf(file,"UserName : \n");
+        fprintf(file,"UserEmail : \n");
         fclose(file);
         
-        file =fopen(projectsFilePath,"w");
+        file =fopen(vgitMainProjects,"w");
         fprintf(file,"");
         fclose(file);
         chdir(workingDirectory);
@@ -184,12 +232,13 @@ int init()
 
         // creating settings.txt for repository
         file=fopen(reposettingsAddrress,"w");
-        fprintf(file,"");
+        fprintf(file,"UserName : \n");
+        fprintf(file,"UserEmail : \n");
         fclose(file);
 
 
         // save repo Full Address
-        file =fopen(projectsFilePath,"a");
+        file =fopen(vgitMainProjects,"a");
         fputs(repoFullAddrress,file);
         fclose(file);
 }
