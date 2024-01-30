@@ -4,20 +4,26 @@
 #include <sys/stat.h>
 
 // functions prototypes
-int init(void);
-int doesFolderExist(char *);
-void MainSettings(void);
-void globalNameConfig(const char * New_Value);
-void globalEmailConfig(const char * New_Value);
-void projectsGlobalConfig();
-void projectLocalNameConfig(char *,const char *);
-void projectLocalEmailConfig(char *,const char *);
+int init(void); // init function
+int doesFolderExist(char *); // check folder existence for init function error handling
+void MainSettings(void); // creates settings folder for vgit
+void globalNameConfig(const char * New_Value); // save global username in main settings
+void globalEmailConfig(const char * New_Value); // save global useremail in main settings
+void globalAliasConfig(const char *,const char *);
+void projectsGlobalConfig();  // save username and useremail in every repo settings 
+void projectLocalNameConfig(char *,const char *); // save username in repo settings
+void projectLocalEmailConfig(char *,const char *); // save useremail in repo settings
+void projectLocalAliasConfig(char *,const char *,const char *); // save alias in repo settings
+int lineCounter(const char *); // counts file's line number
+void aliasChecker(char *,const char *);
+
 
 
 // constant values
 const char settingsFolder[]="C:\\Users\\admin\\Desktop\\settings";
 const char vgitMainSettings[]="C:\\Users\\admin\\Desktop\\settings\\settings.txt";
 const char vgitMainProjects[]="C:\\Users\\admin\\Desktop\\settings\\projects.txt";
+const char vgitMainAlias[]="C:\\Users\\admin\\Desktop\\settings\\alias.txt";
 
 // global variables
 FILE * file;
@@ -31,9 +37,17 @@ int main(int argc, char const *argv[])
     getcwd(workingDirectory,sizeof(workingDirectory));
     MainSettings();
 
+
     if (strcmp(argv[0], "vgit") == 0 && argc == 1)
     {
-        printf("\tvgit version 1.0.0");
+        printf("(: vgit version 1.0.0 :)");
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "init") == 0)
+    {
+        init();
+    }
+    else if(strcmp(argv[0],"vgit")==0 && argc == 2){
+        aliasChecker(workingDirectory,argv[1]);
     }
     else if(strcmp(argv[0],"vgit")==0 &&strcmp(argv[1],"config")==0 && strcmp(argv[2],"--global")==0){
         if (strcmp(argv[3],"user.name")==0)
@@ -44,6 +58,9 @@ int main(int argc, char const *argv[])
         else if(strcmp(argv[3],"user.email")==0){
             globalEmailConfig(argv[4]);
             projectsGlobalConfig();
+        }
+        else if(strncmp(argv[3],"alias",5)==0){
+            globalAliasConfig(argv[3],argv[4]);
         }    
     }
     else if(strcmp(argv[0],"vgit")==0 &&strcmp(argv[1],"config")==0 )
@@ -54,11 +71,11 @@ int main(int argc, char const *argv[])
         else if(strcmp(argv[2],"user.email")==0){
             projectLocalEmailConfig(workingDirectory,argv[3]);
         }
+        else if(strncmp(argv[2],"alias",5)==0){
+            projectLocalAliasConfig(workingDirectory,argv[2],argv[3]);
+        }
     }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "init") == 0)
-    {
-        init();
-    }
+    
 
     return 0;
 }
@@ -94,26 +111,53 @@ void globalEmailConfig(const char * NewValue){
     fclose(file);
 }
 
-void projectsGlobalConfig(){
+void globalAliasConfig(const char * aliasName,const char * command){
     
-    int repoCount=0,ch=0;
+    file=fopen(vgitMainAlias,"a");
+    fprintf(file,"%s : %s\n",aliasName+6,command);
+    fclose(file);
+
+
+    int repoCount;
     char projects[1024][1024];
     
-    file=fopen(vgitMainProjects,"r");
-    do{
-        ch=fgetc(file);
-        if (ch == '\n')
-        {
-            repoCount++;
-        }
-    }while(ch!=EOF);
-    fclose(file);
-    repoCount++;
+    repoCount=lineCounter(vgitMainProjects);
 
     file=fopen(vgitMainProjects,"r");
     for(int i=0;i<repoCount;i++){
         fgets(projects[i],1024,file);
-        projects[i][strlen(projects[i])]='\0';        
+        projects[i][strlen(projects[i])-1]='\0';        
+    }
+    fclose(file);
+
+    for (int i = 0; i < repoCount; i++)
+    {
+
+        char tempRepoAliasPath[1024];
+        sprintf(tempRepoAliasPath,"%s\\alias.txt",projects[i]);
+
+        file=fopen(tempRepoAliasPath,"a");
+        fprintf(file,"%s : %s\n",aliasName+6,command);
+        fclose(file);
+   
+    }
+
+    
+}
+
+
+void projectsGlobalConfig(){
+    
+    int repoCount;
+    char projects[1024][1024];
+    
+    
+    repoCount=lineCounter(vgitMainProjects);
+
+    file=fopen(vgitMainProjects,"r");
+    for(int i=0;i<repoCount;i++){
+        fgets(projects[i],1024,file);
+        projects[i][strlen(projects[i])-1]='\0';        
     }
     fclose(file);
     
@@ -129,7 +173,6 @@ void projectsGlobalConfig(){
         fgets(Data[0],1024,file);
         fgets(Data[1],1024,file);
         fclose(file);
-
 
         file=fopen(tempRepoSettingsPath,"w");
         fputs(Data[0],file);
@@ -170,9 +213,68 @@ void projectLocalEmailConfig(char * workingDirectory,const char * NewValue){
     file=fopen(settingsPath,"w");
     fputs(prevSettings[0],file);
     fprintf(file,"UserEmail : %s\n",NewValue);
-    
     fclose(file);
     
+}
+
+void projectLocalAliasConfig(char * workingDirectory,const char * aliasName,const char * command){
+    char aliasPath[1024];
+    sprintf(aliasPath,"%s\\.vgit\\alias.txt",workingDirectory);
+
+    file=fopen(aliasPath,"a");
+    fprintf(file,"%s : %s\n",aliasName+6,command);
+    fclose(file);
+
+}
+
+// checks if alias exists
+void aliasChecker(char * workingDirectory,const char * command){
+    char aliasTxtFilePath[1024];
+    sprintf(aliasTxtFilePath,"%s\\.vgit\\alias.txt",workingDirectory);
+
+    char aliases[1024][1024];
+
+    int aliasCount;
+    aliasCount=lineCounter(aliasTxtFilePath);
+
+
+    file=fopen(aliasTxtFilePath,"r");
+    for (int i=0;i<aliasCount;i++){
+        fgets(aliases[i],1024,file);
+        aliases[i][strlen(aliases[i])-1]='\0';
+    }
+    fclose(file);
+
+    int commandLength=strlen(command);
+
+    for (int i = 0; i < aliasCount; i++)
+    {
+        if (strncmp(aliases[i],command,commandLength)==0)
+        {
+            char * command=aliases[i]+commandLength+3;
+            system(command);
+            return;
+        }
+    }
+    printf("Invalid Command :(");
+
+}
+
+// counts file's line number
+int lineCounter(const char * fileAddress){
+    int lineNumber=0,ch=0;
+    
+    file=fopen(fileAddress,"r");
+    do{
+        ch=fgetc(file);
+        if (ch == '\n')
+        {
+            lineNumber++;
+        }
+    }while(ch!=EOF);
+    fclose(file);
+
+    return lineNumber;
 }
 
 // vgit main settings
@@ -194,9 +296,16 @@ void MainSettings(){
         fprintf(file,"UserEmail : \n");
         fclose(file);
         
+        // creating projects.txt
         file =fopen(vgitMainProjects,"w");
         fprintf(file,"");
         fclose(file);
+
+        // creating alias.txt
+        file=fopen(vgitMainAlias,"w");
+        fprintf(file,"");
+        fclose(file);
+
         chdir(workingDirectory);
     }
 }
@@ -228,6 +337,9 @@ int init()
 
         char reposettingsAddrress[1024];
         sprintf(reposettingsAddrress,"%s\\%s",repoFullAddrress,"settings.txt");
+        
+        char repoAliasAddrress[1024];
+        sprintf(repoAliasAddrress,"%s\\%s",repoFullAddrress,"alias.txt");
 
 
         // creating settings.txt for repository
@@ -239,7 +351,12 @@ int init()
 
         // save repo Full Address
         file =fopen(vgitMainProjects,"a");
-        fputs(repoFullAddrress,file);
+        fprintf(file,"%s\n",repoFullAddrress);
+        fclose(file);
+
+        // creating alias.txt for repository
+        file=fopen(repoAliasAddrress,"w");
+        fprintf(file,"");
         fclose(file);
 }
 
