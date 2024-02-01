@@ -26,6 +26,12 @@ int addToStaging(char *, char const *);
 void listFilesRecursively(const char *, char[][1024], int *);
 int match(const char *, char *);
 
+int runReset(char *, char const *);
+int removeFromStaging(char *, char const *);
+int undo(char *);
+
+void status(char *);
+
 // constant values
 const char settingsFolder[] = "C:\\Users\\admin\\Desktop\\settings";
 const char vgitMainSettings[] = "C:\\Users\\admin\\Desktop\\settings\\settings.txt";
@@ -84,15 +90,39 @@ int main(int argc, char const *argv[])
     }
     else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "add") == 0)
     {
-        if (strcmp(argv[2],"-f")!=0){
+        if (strcmp(argv[2], "-f") != 0)
+        {
             runAdd(workingDirectory, argv[2]);
         }
-        else if (strcmp(argv[2],"-f")==0){
+        else if (strcmp(argv[2], "-f") == 0)
+        {
             for (int i = 3; i < argc; i++)
             {
-                runAdd(workingDirectory,argv[i]);
-            }  
+                runAdd(workingDirectory, argv[i]);
+            }
         }
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "reset") == 0)
+    {
+        if (strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-undo") != 0)
+        {
+            runReset(workingDirectory, argv[2]);
+        }
+        else if (strcmp(argv[2], "-f") == 0)
+        {
+            for (int i = 3; i < argc; i++)
+            {
+                runReset(workingDirectory, argv[i]);
+            }
+        }
+        else if (strcmp(argv[2], "-undo") == 0)
+        {
+            undo(workingDirectory);
+        }
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "status") == 0)
+    {
+        status(workingDirectory);
     }
     else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
     {
@@ -368,6 +398,9 @@ int init()
     char repoStagingAddress[1024];
     sprintf(repoStagingAddress, "%s\\%s", repoFullAddrress, "staging.txt");
 
+    char undoControllerAddress[1024];
+    sprintf(undoControllerAddress, "%s\\%s", repoFullAddrress, "undoController.txt");
+
     // creating settings.txt for repository
     file = fopen(reposettingsAddrress, "w");
     fprintf(file, "UserName : \n");
@@ -381,12 +414,13 @@ int init()
 
     // creating alias.txt for repository
     file = fopen(repoAliasAddrress, "w");
-    fprintf(file, "");
     fclose(file);
 
     // creating staging.txt for repository
     file = fopen(repoStagingAddress, "w");
-    fprintf(file, "");
+    fclose(file);
+
+    file = fopen(undoControllerAddress, "w");
     fclose(file);
 }
 
@@ -446,6 +480,9 @@ int addToStaging(char *workingDirectory, char const *path)
     char absolutePath[1024];
     sprintf(absolutePath, "%s\\%s", workingDirectory, path);
 
+    char undoControllerPath[1024];
+    sprintf(undoControllerPath, "%s\\.vgit\\undoController.txt", workingDirectory);
+
     struct stat st;
 
     if (stat(absolutePath, &st) == 0)
@@ -469,6 +506,7 @@ int addToStaging(char *workingDirectory, char const *path)
             fclose(file);
 
             file = fopen(repoStagingAddress, "a");
+
             int flag = 1;
             for (int i = 0; i < dataNumber; i++)
             {
@@ -482,6 +520,11 @@ int addToStaging(char *workingDirectory, char const *path)
             {
                 fprintf(file, "%s\n", path);
             }
+            fclose(file);
+
+            file = fopen(undoControllerPath, "w");
+            fprintf(file, "%s\n", path);
+            fclose(file);
         }
 
         // if path declare a directory not a file
@@ -523,6 +566,13 @@ int addToStaging(char *workingDirectory, char const *path)
                 }
             }
             fclose(file);
+
+            file = fopen(undoControllerPath, "w");
+            for (int j = 0; j < *index; j++)
+            {
+                fprintf(file, "%s\n", filesToStage[j]);
+            }
+            fclose(file);
         }
     }
     else
@@ -539,17 +589,17 @@ int addToStaging(char *workingDirectory, char const *path)
             flag = match(path, entry->d_name);
             if (!flag)
             {
-                strcpy(realPath,entry->d_name);
-                return addToStaging(workingDirectory,realPath);
+                strcpy(realPath, entry->d_name);
+                return addToStaging(workingDirectory, realPath);
                 break;
             }
         }
-        
+
         if (flag)
         {
-            printf("fatal: pathspec '%s' did not match any files\n",path);
+            printf("fatal: pathspec '%s' did not match any files\n", path);
         }
-        
+        closedir(dir);
     }
 
     return 0;
@@ -614,4 +664,287 @@ int match(const char *wildcard, char *string)
 
     // If none of the above conditions are met, the strings don't match.
     return 1;
+}
+
+int runReset(char *workingDirectory, char const *path)
+{
+
+    // TODO: handle command in non-root directories
+    if (path == 0)
+    {
+        printf("please specify a file or a dirctory");
+        return 1;
+    }
+
+    return removeFromStaging(workingDirectory, path);
+}
+
+int removeFromStaging(char *workingDirectory, char const *path)
+{
+
+    char absolutePath[1024];
+    sprintf(absolutePath, "%s\\%s", workingDirectory, path);
+
+    struct stat st;
+
+    if (stat(absolutePath, &st) == 0)
+    {
+        char repoStagingAddress[1024];
+        sprintf(repoStagingAddress, "%s\\.vgit\\staging.txt", workingDirectory);
+
+        // if path declare a file not a directory
+        if (S_ISREG(st.st_mode))
+        {
+            int dataNumber = lineCounter(repoStagingAddress);
+
+            char Data[dataNumber][1024];
+
+            int index = -1;
+
+            file = fopen(repoStagingAddress, "r");
+            for (int i = 0; i < dataNumber; i++)
+            {
+                fgets(Data[i], sizeof(Data[i]), file);
+                Data[i][strlen(Data[i]) - 1] = '\0';
+
+                if (strcmp(Data[i], path) == 0)
+                {
+                    index = i;
+                }
+            }
+            fclose(file);
+
+            file = fopen(repoStagingAddress, "w");
+
+            for (int i = 0; i < dataNumber; i++)
+            {
+                if (i == index)
+                {
+                    continue;
+                }
+                fprintf(file, "%s\n", Data[i]);
+            }
+        }
+
+        // if path declare a directory not a file
+        else if (S_ISDIR(st.st_mode))
+        {
+            char filesToUnstage[1024][1024];
+            int *index = malloc(1 * sizeof(int));
+            *index = 0;
+            listFilesRecursively(absolutePath, filesToUnstage, index);
+
+            int dataNumber = lineCounter(repoStagingAddress);
+
+            char Data[dataNumber][1024];
+
+            file = fopen(repoStagingAddress, "r");
+            for (int i = 0; i < dataNumber; i++)
+            {
+                fgets(Data[i], sizeof(Data[i]), file);
+                Data[i][strlen(Data[i]) - 1] = '\0';
+            }
+            fclose(file);
+
+            file = fopen(repoStagingAddress, "w");
+
+            for (int i = 0; i < dataNumber; i++)
+            {
+                int flag = 1;
+                for (int j = 0; j < *index; j++)
+                {
+                    if (strcmp(Data[i], filesToUnstage[j]) == 0)
+                    {
+                        flag = 0;
+                        break;
+                    }
+                }
+                if (flag)
+                {
+                    fprintf(file, "%s\n", Data[i]);
+                }
+            }
+            fclose(file);
+        }
+    }
+    else
+    {
+
+        DIR *dir = opendir(".");
+        struct dirent *entry;
+
+        int flag = 1;
+        char realPath[1024];
+
+        while ((entry = readdir(dir)) != NULL)
+        {
+            flag = match(path, entry->d_name);
+            if (!flag)
+            {
+                strcpy(realPath, entry->d_name);
+                return addToStaging(workingDirectory, realPath);
+                break;
+            }
+        }
+
+        if (flag)
+        {
+            printf("fatal: pathspec '%s' did not match any files\n", path);
+        }
+        closedir(dir);
+    }
+
+    return 0;
+}
+
+int undo(char *workingDirectory)
+{
+
+    char repoundoControllerAddress[1024];
+    sprintf(repoundoControllerAddress, "%s\\.vgit\\undoController.txt", workingDirectory);
+
+    char repoStagingAddress[1024];
+    sprintf(repoStagingAddress, "%s\\.vgit\\staging.txt", workingDirectory);
+
+    int filesToUnstageNum = lineCounter(repoundoControllerAddress);
+
+    int stagedFilesNum = lineCounter(repoStagingAddress);
+
+    char filesToUnstage[filesToUnstageNum][1024];
+    char stagedFiles[stagedFilesNum][1024];
+
+    file = fopen(repoundoControllerAddress, "r");
+    for (int i = 0; i < filesToUnstageNum; i++)
+    {
+        fgets(filesToUnstage[i], sizeof(filesToUnstage[i]), file);
+        filesToUnstage[i][strlen(filesToUnstage[i]) - 1] = '\0';
+    }
+    fclose(file);
+
+    file = fopen(repoStagingAddress, "r");
+    for (int i = 0; i < stagedFilesNum; i++)
+    {
+        fgets(stagedFiles[i], sizeof(stagedFiles[i]), file);
+        stagedFiles[i][strlen(stagedFiles[i]) - 1] = '\0';
+    }
+    fclose(file);
+
+    file = fopen(repoStagingAddress, "w");
+    for (int i = 0; i < stagedFilesNum; i++)
+    {
+        int flag = 1;
+        for (int j = 0; j < filesToUnstageNum; j++)
+        {
+            if (strcmp(stagedFiles[i], filesToUnstage[j]) == 0)
+            {
+                flag = 0;
+                break;
+            }
+        }
+        if (flag)
+        {
+            fprintf(file, "%s\n", stagedFiles[i]);
+        }
+    }
+    fclose(file);
+}
+
+void status(char *workingDirectory)
+{
+
+    char repoStagingAddress[1024];
+    sprintf(repoStagingAddress, "%s\\.vgit\\staging.txt", workingDirectory);
+
+    int stagedFilesNum = lineCounter(repoStagingAddress);
+
+    char stagedFiles[stagedFilesNum][1024];
+
+    file = fopen(repoStagingAddress, "r");
+
+    for (int i = 0; i < stagedFilesNum; i++)
+    {
+        fgets(stagedFiles[i], sizeof(stagedFiles[i]), file);
+        stagedFiles[i][strlen(stagedFiles[i]) - 1] = '\0';
+    }
+    fclose(file);
+
+    char repoundoControllerAddress[1024];
+    sprintf(repoundoControllerAddress, "%s\\.vgit\\undoController.txt", workingDirectory);
+
+    int filesDeletedFromStage = lineCounter(repoundoControllerAddress);
+
+    char filesDeleted[filesDeletedFromStage][1024];
+
+    file = fopen(repoundoControllerAddress, "r");
+
+    for (int i = 0; i < filesDeletedFromStage; i++)
+    {
+        fgets(filesDeleted[i], sizeof(filesDeleted[i]), file);
+        filesDeleted[i][strlen(filesDeleted[i]) - 1] = '\0';
+    }
+    fclose(file);
+
+    char AllFiles[1024][1024];
+    int *index = (int *)malloc(1 * sizeof(int));
+    *index = 0;
+
+    char tempDirectory[1024];
+    getcwd(tempDirectory, sizeof(tempDirectory));
+
+    listFilesRecursively(tempDirectory, AllFiles, index);
+
+    // for (int i = 0; i < *index; i++)
+    // {
+    //     printf("%s\n",AllFiles[i]);
+    // }
+
+    for (int i = 0; i < stagedFilesNum; i++)
+    {
+        printf("%s +M\n", stagedFiles[i]);
+    }
+
+    printf("------------------------------\n");
+
+    char *configFiles[1024] = {"alias.txt", "settings.txt", "staging.txt", "undoController.txt"};
+
+    for (int i = 0; i < *index; i++)
+    {
+        int flag = 1;
+        for (int j = 0; j < 4; j++)
+        {
+            if (strcmp(AllFiles[i], configFiles[j]) == 0)
+            {
+                flag = 0;
+                break;
+            }
+        }
+        if (!flag)
+        {
+            strcpy(AllFiles[i], "\0");
+        }
+    }
+
+    for (int i = 0; i < *index; i++)
+    {
+        int flag = 1;
+        for (int j = 0; j < stagedFilesNum; j++)
+        {
+            if (strcmp(AllFiles[i], stagedFiles[j]) == 0)
+            {
+                flag = 0;
+                break;
+            }
+        }
+        if (flag && strcmp(AllFiles[i], "\0") != 0)
+        {
+            printf("%s -A\n", AllFiles[i]);
+        }
+    }
+
+    printf("------------------------------\n");
+
+    for (int i = 0; i < filesDeletedFromStage; i++)
+    {
+        printf("%s -D\n", filesDeleted[i]);
+    }
 }
