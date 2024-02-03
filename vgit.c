@@ -4,6 +4,8 @@
 #include <sys/stat.h>
 #include <windows.h>
 #include <dirent.h>
+#include <stdbool.h>
+#include <time.h>
 
 // functions prototypes
 int init(void);              // init function
@@ -21,16 +23,26 @@ void projectLocalAliasConfig(char *, const char *, const char *); // save alias 
 int lineCounter(const char *);                                    // counts file's line number
 void aliasChecker(char *, const char *);
 
-int runAdd(char *, char const *);
-int addToStaging(char *, char const *);
-void listFilesRecursively(const char *, char[][1024], int *);
+int runAdd(char *, char const *, char const **);
+int addToStaging(char *, char const *, char const **);
+void listFilesRecursively(const char *, char[][1024], int *, char const **);
 int match(const char *, char *);
 
-int runReset(char *, char const *);
-int removeFromStaging(char *, char const *);
+int runReset(char *, char const *, char const **);
+int removeFromStaging(char *, char const *, char const **);
 int undo(char *);
 
-void status(char *);
+void status(char *, char const **);
+
+int runCommit(int, char const **);
+int incLastCommitId();
+int checkFileDirectoryExists(char *);
+int trackFile(char *filepath);
+bool isTracked(char *filepath);
+
+void setShortcutMessage(int, const char **);
+void replaceShortcutMessage(int, const char **);
+void removeShortcutMessage(int, const char **);
 
 // constant values
 const char settingsFolder[] = "C:\\Users\\admin\\Desktop\\settings";
@@ -92,13 +104,13 @@ int main(int argc, char const *argv[])
     {
         if (strcmp(argv[2], "-f") != 0)
         {
-            runAdd(workingDirectory, argv[2]);
+            runAdd(workingDirectory, argv[2], argv);
         }
         else if (strcmp(argv[2], "-f") == 0)
         {
             for (int i = 3; i < argc; i++)
             {
-                runAdd(workingDirectory, argv[i]);
+                runAdd(workingDirectory, argv[i], argv);
             }
         }
     }
@@ -106,13 +118,13 @@ int main(int argc, char const *argv[])
     {
         if (strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-undo") != 0)
         {
-            runReset(workingDirectory, argv[2]);
+            runReset(workingDirectory, argv[2], argv);
         }
         else if (strcmp(argv[2], "-f") == 0)
         {
             for (int i = 3; i < argc; i++)
             {
-                runReset(workingDirectory, argv[i]);
+                runReset(workingDirectory, argv[i], argv);
             }
         }
         else if (strcmp(argv[2], "-undo") == 0)
@@ -122,7 +134,23 @@ int main(int argc, char const *argv[])
     }
     else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "status") == 0)
     {
-        status(workingDirectory);
+        status(workingDirectory, argv);
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "commit") == 0)
+    {
+        runCommit(argc, argv);
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "set") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+    {
+        setShortcutMessage(argc, argv);
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "replace") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+    {
+        replaceShortcutMessage(argc, argv);
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "remove") == 0 && strcmp(argv[2], "-s") == 0)
+    {
+        removeShortcutMessage(argc, argv);
     }
     else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
     {
@@ -401,10 +429,23 @@ int init()
     char undoControllerAddress[1024];
     sprintf(undoControllerAddress, "%s\\%s", repoFullAddrress, "undoController.txt");
 
+    char tracksAddress[1024];
+    sprintf(tracksAddress, "%s\\%s", repoFullAddrress, "tracks.txt");
+
+    char shortcutMessageAddress[1024];
+    sprintf(shortcutMessageAddress, "%s\\%s", repoFullAddrress, "shortcutMessage.txt");
+
+    char filesAddress[1024];
+    sprintf(filesAddress, "%s\\%s", repoFullAddrress, "files");
+
+    char commitsAddress[1024];
+    sprintf(commitsAddress, "%s\\%s", repoFullAddrress, "commits");
+
     // creating settings.txt for repository
     file = fopen(reposettingsAddrress, "w");
     fprintf(file, "UserName : \n");
     fprintf(file, "UserEmail : \n");
+    fprintf(file, "last commit ID : 0\n");
     fclose(file);
 
     // save repo Full Address
@@ -422,6 +463,16 @@ int init()
 
     file = fopen(undoControllerAddress, "w");
     fclose(file);
+
+    file = fopen(tracksAddress, "w");
+    fclose(file);
+
+    file = fopen(shortcutMessageAddress, "w");
+    fclose(file);
+
+    mkdir(filesAddress);
+
+    mkdir(commitsAddress);
 }
 
 int doesFolderExist(char *folderName)
@@ -461,7 +512,7 @@ int doesFolderExist(char *folderName)
     }
 }
 
-int runAdd(char *workingDirectory, char const *path)
+int runAdd(char *workingDirectory, char const *path, char const **argv)
 {
 
     // TODO: handle command in non-root directories
@@ -471,10 +522,10 @@ int runAdd(char *workingDirectory, char const *path)
         return 1;
     }
 
-    return addToStaging(workingDirectory, path);
+    return addToStaging(workingDirectory, path, argv);
 }
 
-int addToStaging(char *workingDirectory, char const *path)
+int addToStaging(char *workingDirectory, char const *path, char const **argv)
 {
 
     char absolutePath[1024];
@@ -493,6 +544,22 @@ int addToStaging(char *workingDirectory, char const *path)
         // if path declare a file not a directory
         if (S_ISREG(st.st_mode))
         {
+
+            char fileAddress[1024];
+            sprintf(fileAddress, "%s\\.vgit\\files\\%s", workingDirectory, path);
+
+            FILE *fileToReadFrom = fopen(absolutePath, "r");
+            FILE *fileToSaveInFiles = fopen(fileAddress, "w");
+
+            char line[1024];
+            while (fgets(line, sizeof(line), fileToReadFrom) != NULL)
+            {
+                fputs(line, fileToSaveInFiles);
+            }
+
+            fclose(fileToReadFrom);
+            fclose(fileToSaveInFiles);
+
             int dataNumber = lineCounter(repoStagingAddress);
 
             char Data[dataNumber][1024];
@@ -533,7 +600,7 @@ int addToStaging(char *workingDirectory, char const *path)
             char filesToStage[1024][1024];
             int *index = malloc(1 * sizeof(int));
             *index = 0;
-            listFilesRecursively(absolutePath, filesToStage, index);
+            listFilesRecursively(absolutePath, filesToStage, index, argv);
 
             int dataNumber = lineCounter(repoStagingAddress);
 
@@ -590,7 +657,7 @@ int addToStaging(char *workingDirectory, char const *path)
             if (!flag)
             {
                 strcpy(realPath, entry->d_name);
-                return addToStaging(workingDirectory, realPath);
+                return addToStaging(workingDirectory, realPath, argv);
                 break;
             }
         }
@@ -605,7 +672,7 @@ int addToStaging(char *workingDirectory, char const *path)
     return 0;
 }
 
-void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index)
+void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index, char const **argv)
 {
 
     char searchPath[MAX_PATH];
@@ -630,12 +697,35 @@ void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *
                 {
                     char subDir[MAX_PATH];
                     snprintf(subDir, MAX_PATH, "%s\\%s", basePath, findData.cFileName);
-                    listFilesRecursively(subDir, filesToStage, index);
+                    listFilesRecursively(subDir, filesToStage, index, argv);
                 }
                 else
                 {
                     strcpy(filesToStage[*index], findData.cFileName);
                     (*index)++;
+
+                    if (strcmp(argv[1], "add") == 0)
+                    {
+                        char fileToReadFromAddress[1024];
+                        memset(fileToReadFromAddress, '\0', sizeof(fileToReadFromAddress));
+                        strncpy(fileToReadFromAddress, searchPath, strlen(searchPath) - 1);
+                        strcat(fileToReadFromAddress, findData.cFileName);
+
+                        char fileAddress[1024];
+                        sprintf(fileAddress, "%s\\.vgit\\files\\%s", workingDirectory, findData.cFileName);
+
+                        FILE *fileToReadFrom = fopen(fileToReadFromAddress, "r");
+                        FILE *fileToSaveInFiles = fopen(fileAddress, "w");
+
+                        char line[1024];
+                        while (fgets(line, sizeof(line), fileToReadFrom) != NULL)
+                        {
+                            fputs(line, fileToSaveInFiles);
+                        }
+
+                        fclose(fileToReadFrom);
+                        fclose(fileToSaveInFiles);
+                    }
                 }
             }
         } while (FindNextFile(hFind, &findData) != 0);
@@ -666,7 +756,7 @@ int match(const char *wildcard, char *string)
     return 1;
 }
 
-int runReset(char *workingDirectory, char const *path)
+int runReset(char *workingDirectory, char const *path, char const **argv)
 {
 
     // TODO: handle command in non-root directories
@@ -676,10 +766,10 @@ int runReset(char *workingDirectory, char const *path)
         return 1;
     }
 
-    return removeFromStaging(workingDirectory, path);
+    return removeFromStaging(workingDirectory, path, argv);
 }
 
-int removeFromStaging(char *workingDirectory, char const *path)
+int removeFromStaging(char *workingDirectory, char const *path, char const **argv)
 {
 
     char absolutePath[1024];
@@ -732,7 +822,7 @@ int removeFromStaging(char *workingDirectory, char const *path)
             char filesToUnstage[1024][1024];
             int *index = malloc(1 * sizeof(int));
             *index = 0;
-            listFilesRecursively(absolutePath, filesToUnstage, index);
+            listFilesRecursively(absolutePath, filesToUnstage, index, argv);
 
             int dataNumber = lineCounter(repoStagingAddress);
 
@@ -782,7 +872,7 @@ int removeFromStaging(char *workingDirectory, char const *path)
             if (!flag)
             {
                 strcpy(realPath, entry->d_name);
-                return addToStaging(workingDirectory, realPath);
+                return addToStaging(workingDirectory, realPath, argv);
                 break;
             }
         }
@@ -849,7 +939,8 @@ int undo(char *workingDirectory)
     fclose(file);
 }
 
-void status(char *workingDirectory)
+void status(char *workingDirectory, char const **argv)
+
 {
 
     char repoStagingAddress[1024];
@@ -891,7 +982,7 @@ void status(char *workingDirectory)
     char tempDirectory[1024];
     getcwd(tempDirectory, sizeof(tempDirectory));
 
-    listFilesRecursively(tempDirectory, AllFiles, index);
+    listFilesRecursively(tempDirectory, AllFiles, index, argv);
 
     // for (int i = 0; i < *index; i++)
     // {
@@ -947,4 +1038,276 @@ void status(char *workingDirectory)
     {
         printf("%s -D\n", filesDeleted[i]);
     }
+}
+
+int runCommit(int argc, char const **argv)
+{
+    if (argc < 4)
+    {
+        printf("please use the correct format");
+        return 1;
+    }
+
+    char stagedFilesAddress[1024] = ".vgit\\staging.txt";
+
+    int stagedFilesNumber = lineCounter(stagedFilesAddress);
+    if (stagedFilesNumber == 0)
+    {
+        printf("nothing added to commit");
+        return 0;
+    }
+
+    if (strlen(argv[3]) > 72)
+    {
+        printf("message length exceeded maximum allowed length");
+        return 1;
+    }
+
+    char message[72];
+
+    if (strcmp(argv[2], "-m") == 0)
+    {
+        strcpy(message, argv[3]);
+    }
+    else if (strcmp(argv[2], "-s") == 0)
+    {
+        int shortcutMessagesNumber = lineCounter(".vgit\\shortcutMessage.txt");
+        int flag = 0;
+
+        if (shortcutMessagesNumber == 0)
+        {
+            printf("Shorctut name is invalid");
+            return 1;
+        }
+        else
+        {
+            file = fopen(".vgit\\shortcutMessage.txt", "r");
+            char line[1024];
+            for (int i = 0; i < shortcutMessagesNumber; i++)
+            {
+                fgets(line, sizeof(line), file);
+                line[strlen(line) - 1] = '\0';
+
+                if (strncmp(argv[3], line, strlen(argv[3])) == 0)
+                {
+                    strcpy(message, line + (strlen(argv[3]) + 3));
+                    fclose(file);
+                    flag = 1;
+                    break;
+                }
+            }
+            if (flag == 0)
+            {
+                printf("Shorctut name is invalid");
+                fclose(file);
+                return 1;
+            }
+        }
+    }
+
+    int commitId = incLastCommitId();
+    if (commitId == -1)
+        return 1;
+
+    char commitFolder[1024];
+    sprintf(commitFolder, ".vgit\\commits\\%d", commitId);
+    mkdir(commitFolder);
+
+    char commitMessage[1024];
+    strcpy(commitMessage, commitFolder);
+    strcat(commitMessage, "\\message.txt");
+
+    file = fopen(commitMessage, "w");
+    fprintf(file, argv[3]);
+    fclose(file);
+
+    FILE *file = fopen(".vgit\\staging.txt", "r");
+    if (file == NULL)
+        return 1;
+    char line[1024];
+    while (fgets(line, sizeof(line), file) != NULL)
+    {
+        int length = strlen(line);
+
+        // remove '\n'
+        if (length > 0 && line[length - 1] == '\n')
+        {
+            line[length - 1] = '\0';
+        }
+
+        char fileAddress[1024];
+        sprintf(fileAddress, ".vgit\\files\\%s", line);
+
+        char commitedFileAddress[1024];
+        sprintf(commitedFileAddress, "%s\\%s", commitFolder, line);
+
+        FILE *fileToCommit = fopen(fileAddress, "r");
+        FILE *commitedFile = fopen(commitedFileAddress, "w");
+
+        char tmpLine[1024];
+        while (fgets(tmpLine, sizeof(tmpLine), fileToCommit) != NULL)
+        {
+            fputs(tmpLine, commitedFile);
+        }
+        printf("commit %s\n", line);
+
+        trackFile(line);
+    }
+    fclose(file);
+
+    // free staging
+    file = fopen(".vgit\\staging.txt", "w");
+    if (file == NULL)
+        return 1;
+    fclose(file);
+
+    fprintf(stdout, "commit successfully with commit ID %d\n", commitId);
+    fprintf(stdout, "commit Message : %s", message);
+
+    time_t now;
+    time(&now);
+    printf("\n%s", ctime(&now));
+
+    return 0;
+}
+
+// returns new commit_ID
+int incLastCommitId()
+{
+    FILE *file = fopen(".vgit\\lastCommitId.txt", "r");
+    if (file == NULL)
+        return -1;
+
+    FILE *tmpFile = fopen(".vgit\\tmpLastCommitId.txt", "w");
+    if (tmpFile == NULL)
+        return -1;
+
+    int lastCommitId;
+
+    fscanf(file, "last commit ID : %d\n", &lastCommitId);
+    lastCommitId++;
+    fprintf(tmpFile, "last commit ID: %d\n", lastCommitId);
+
+    fclose(file);
+    fclose(tmpFile);
+
+    remove(".vgit\\lastCommitId.txt");
+    rename(".vgit\\tmpLastCommitId.txt", ".vgit\\lastCommitId.txt");
+    return lastCommitId;
+}
+
+int trackFile(char *filepath)
+{
+    if (isTracked(filepath))
+        return 0;
+
+    FILE *file = fopen(".vgit\\tracks.txt", "a");
+    if (file == NULL)
+        return 1;
+    fprintf(file, "%s\n", filepath);
+    return 0;
+}
+
+bool isTracked(char *filepath)
+{
+    FILE *file = fopen(".vgit\\tracks.txt", "r");
+    if (file == NULL)
+        return false;
+    char line[1024];
+    while (fgets(line, sizeof(line), file) != NULL)
+    {
+        int length = strlen(line);
+
+        // remove '\n'
+        if (length > 0 && line[length - 1] == '\n')
+        {
+            line[length - 1] = '\0';
+        }
+
+        if (strcmp(line, filepath) == 0)
+            return true;
+    }
+    fclose(file);
+
+    return false;
+}
+
+void setShortcutMessage(int argc, const char **argv)
+{
+
+    file = fopen(".vgit\\shortcutMessage.txt", "a");
+    fprintf(file, "%s : %s\n", argv[5], argv[3]);
+    fclose(file);
+}
+
+void replaceShortcutMessage(int argc, const char **argv)
+{
+
+    int shortcutMessagesNumber = lineCounter(".vgit\\shortcutMessage.txt");
+    char shortcutMessages[shortcutMessagesNumber][1024];
+
+    file = fopen(".vgit\\shortcutMessage.txt", "r");
+    for (int i = 0; i < shortcutMessagesNumber; i++)
+    {
+        fgets(shortcutMessages[i], sizeof(shortcutMessages[i]), file);
+    }
+    fclose(file);
+
+    int flag = 0;
+    file = fopen(".vgit\\shortcutMessage.txt", "w");
+    for (int i = 0; i < shortcutMessagesNumber; i++)
+    {
+        if (strncmp(argv[5], shortcutMessages[i], strlen(argv[5])) == 0)
+        {
+            fprintf(file, "%s : %s\n", argv[5], argv[3]);
+            flag = 1;
+        }
+        else
+        {
+            fputs(shortcutMessages[i], file);
+        }
+    }
+    if (flag == 0)
+    {
+        printf("shortcut name is invalid");
+    }
+    fclose(file);
+}
+
+void removeShortcutMessage(int argc, const char **argv)
+{
+    if (argc < 4)
+    {
+        printf("please use the correct format");
+        return;
+    }
+
+    int shortcutMessagesNumber = lineCounter(".vgit\\shortcutMessage.txt");
+    char shortcutMessages[shortcutMessagesNumber][1024];
+
+    file = fopen(".vgit\\shortcutMessage.txt", "r");
+    for (int i = 0; i < shortcutMessagesNumber; i++)
+    {
+        fgets(shortcutMessages[i], sizeof(shortcutMessages[i]), file);
+    }
+    fclose(file);
+
+    int flag = 0;
+    file = fopen(".vgit\\shortcutMessage.txt", "w");
+    for (int i = 0; i < shortcutMessagesNumber; i++)
+    {
+        if (strncmp(argv[3], shortcutMessages[i], strlen(argv[3])) == 0)
+        {
+            flag = 1;
+        }
+        else
+        {
+            fputs(shortcutMessages[i], file);
+        }
+    }
+    if (flag == 0)
+    {
+        printf("shortcut name is invalid");
+    }
+    fclose(file);
 }
