@@ -44,6 +44,21 @@ void setShortcutMessage(int, const char **);
 void replaceShortcutMessage(int, const char **);
 void removeShortcutMessage(int, const char **);
 
+int runLog(int, const char **);
+// Define a structure to hold file information
+struct FileMetadata
+{
+    char name[256];
+    time_t modified_time;
+};
+// Comparison function for sorting file metadata by modified time
+int compare(const void *a, const void *b)
+{
+    struct FileMetadata *fileA = (struct FileMetadata *)a;
+    struct FileMetadata *fileB = (struct FileMetadata *)b;
+    return difftime(fileB->modified_time, fileA->modified_time);
+}
+
 // constant values
 const char settingsFolder[] = "C:\\Users\\admin\\Desktop\\settings";
 const char vgitMainSettings[] = "C:\\Users\\admin\\Desktop\\settings\\settings.txt";
@@ -152,6 +167,11 @@ int main(int argc, char const *argv[])
     {
         removeShortcutMessage(argc, argv);
     }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "log") == 0)
+    {
+        runLog(argc, argv);
+    }
+
     else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
     {
         aliasChecker(workingDirectory, argv[1]);
@@ -1113,13 +1133,7 @@ int runCommit(int argc, char const **argv)
     sprintf(commitFolder, ".vgit\\commits\\%d", commitId);
     mkdir(commitFolder);
 
-    char commitMessage[1024];
-    strcpy(commitMessage, commitFolder);
-    strcat(commitMessage, "\\message.txt");
-
-    file = fopen(commitMessage, "w");
-    fprintf(file, argv[3]);
-    fclose(file);
+    int filesNumber = 0;
 
     FILE *file = fopen(".vgit\\staging.txt", "r");
     if (file == NULL)
@@ -1150,9 +1164,32 @@ int runCommit(int argc, char const **argv)
             fputs(tmpLine, commitedFile);
         }
         printf("commit %s\n", line);
+        filesNumber++;
 
         trackFile(line);
     }
+    fclose(file);
+
+    // save commit info
+    char commitInfo[1024];
+    strcpy(commitInfo, commitFolder);
+    strcat(commitInfo, "\\commitInfo.txt");
+
+    time_t now;
+    time(&now);
+    char userName[128];
+
+    file = fopen(".vgit\\settings.txt", "r");
+    fgets(userName, sizeof(userName), file);
+    fclose(file);
+
+    file = fopen(commitInfo, "w");
+    fprintf(file, "commit Time : %s", ctime(&now));
+    fprintf(file, "commit Message : %s\n", message);
+    fputs(userName, file);
+    fprintf(file, "commit Id : %d\n", commitId);
+    fprintf(file, "branch : \n");
+    fprintf(file, "files Number : %d\n", filesNumber);
     fclose(file);
 
     // free staging
@@ -1164,8 +1201,6 @@ int runCommit(int argc, char const **argv)
     fprintf(stdout, "commit successfully with commit ID %d\n", commitId);
     fprintf(stdout, "commit Message : %s", message);
 
-    time_t now;
-    time(&now);
     printf("\n%s", ctime(&now));
 
     return 0;
@@ -1310,4 +1345,290 @@ void removeShortcutMessage(int argc, const char **argv)
         printf("shortcut name is invalid");
     }
     fclose(file);
+}
+
+int runLog(int argc, const char **argv)
+{
+
+    struct stat fileStat;
+    struct dirent *entry;
+    DIR *directory;
+
+    char dirName[128] = ".vgit\\commits";
+
+    directory = opendir(dirName);
+    if (directory == NULL)
+    {
+        printf("Unable to read directory");
+        return 1;
+    }
+
+    struct FileMetadata files[1000]; // Assuming a maximum of 1000 files
+    int filesNum = 0;
+
+    // Read each entry in the directory
+    while ((entry = readdir(directory)) != NULL)
+    {
+        char path[256];
+        snprintf(path, sizeof(path), "%s\\%s", dirName, entry->d_name);
+        if (stat(path, &fileStat) == 0 && strcmp(entry->d_name, ".") && strcmp(entry->d_name, ".."))
+        {
+            strcpy(files[filesNum].name, path);
+            files[filesNum].modified_time = fileStat.st_mtime;
+            filesNum++;
+        }
+    }
+    closedir(directory);
+
+    // Sort the files based on modified time
+    qsort(files, filesNum, sizeof(struct FileMetadata), compare);
+
+    if (argc == 2)
+    {
+        for (int i = 0; i < filesNum; ++i, fputs("\n--------------------\n", stdout))
+        {
+            char path[1024];
+            sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+            file = fopen(path, "r");
+            char line[1024];
+            while (fgets(line, sizeof(line), file) != NULL)
+            {
+                fputs(line, stdout);
+            }
+        }
+    }
+    else
+    {
+        if (strcmp(argv[2], "-n") == 0)
+        {
+            int Number;
+            sscanf(argv[3], "%d", &Number);
+
+            for (int i = 0; i < Number; ++i, fputs("\n--------------------\n", stdout))
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char line[1024];
+                while (fgets(line, sizeof(line), file) != NULL)
+                {
+                    fputs(line, stdout);
+                }
+            }
+        }
+        else if (strcmp(argv[2], "-branch") == 0)
+        {
+
+            char branchName[128];
+            strcpy(branchName, argv[3]);
+
+            file = fopen(".vgit\\branches.txt", "r");
+            int flag = 0;
+            char line[1024];
+            while (fgets(line, sizeof(line), file) != NULL)
+            {
+                if (strncmp(line, branchName, strlen(branchName)) == 0)
+                {
+                    flag = 1;
+                    break;
+                }
+            }
+            if (!flag)
+            {
+                printf("Branch <%s> doesn't exist", branchName);
+                return 1;
+            }
+
+            for (int i = 0; i < filesNum; ++i)
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char data[6][1024];
+                int index = 0;
+                while (fgets(data[index], sizeof(data[index]), file) != NULL)
+                {
+                    index++;
+                }
+
+                char stringToCompare[1024];
+                sprintf(stringToCompare, "branch : %s\n", branchName);
+
+                if (strcmp(data[4], stringToCompare) == 0)
+                {
+                    for (int j = 0; j <= index; j++)
+                    {
+                        fputs(data[j], stdout);
+                    }
+                    fputs("\n--------------------\n", stdout);
+                }
+            }
+        }
+        else if (strcmp(argv[2], "-author") == 0)
+        {
+            char authorName[128];
+            strcpy(authorName, argv[3]);
+
+            for (int i = 0; i < filesNum; ++i)
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char data[6][1024];
+                int index = 0;
+                while (fgets(data[index], sizeof(data[index]), file) != NULL)
+                {
+                    index++;
+                }
+
+                char stringToCompare[1024];
+                sprintf(stringToCompare, "UserName : %s\n", authorName);
+
+                if (strcmp(data[2], stringToCompare) == 0)
+                {
+                    for (int j = 0; j <= index; j++)
+                    {
+                        fputs(data[j], stdout);
+                    }
+                    fputs("\n--------------------\n", stdout);
+                }
+            }
+        }
+        else if (strcmp(argv[2], "-since") == 0)
+        {
+            char strTime[128];
+            strcpy(strTime, argv[3]);
+
+            struct tm structTime;
+
+            if (sscanf(strTime, "%d-%d-%d %d:%d:%d",
+                       &structTime.tm_year, &structTime.tm_mon, &structTime.tm_mday,
+                       &structTime.tm_hour, &structTime.tm_min, &structTime.tm_sec) != 6)
+            {
+                printf("Error parsing time");
+                return 1;
+            }
+
+            // Adjust struct tm fields
+            structTime.tm_year -= 1900; // Years since 1900
+            structTime.tm_mon -= 1;     // Months start from 0
+            // No need for adjustment for day of the month (tm_mday)
+
+            time_t timeValue;
+
+            timeValue = mktime(&structTime);
+            if (timeValue == -1)
+            {
+                perror("Error converting time");
+                return 1;
+            }
+
+            for (int i = 0; i < filesNum; ++i)
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char data[6][1024];
+                int index = 0;
+                while (fgets(data[index], sizeof(data[index]), file) != NULL)
+                {
+                    index++;
+                }
+
+                if (difftime(files[i].modified_time, timeValue) > 0)
+                {
+                    for (int j = 0; j <= index; j++)
+                    {
+                        fputs(data[j], stdout);
+                    }
+                    fputs("\n--------------------\n", stdout);
+                }
+            }
+        }
+        else if (strcmp(argv[2], "-before") == 0)
+        {
+            char strTime[128];
+            strcpy(strTime, argv[3]);
+
+            struct tm structTime;
+
+            if (sscanf(strTime, "%d-%d-%d %d:%d:%d",
+                       &structTime.tm_year, &structTime.tm_mon, &structTime.tm_mday,
+                       &structTime.tm_hour, &structTime.tm_min, &structTime.tm_sec) != 6)
+            {
+                printf("Error parsing time");
+                return 1;
+            }
+
+            // Adjust struct tm fields
+            structTime.tm_year -= 1900; // Years since 1900
+            structTime.tm_mon -= 1;     // Months start from 0
+            // No need for adjustment for day of the month (tm_mday)
+
+            time_t timeValue;
+
+            timeValue = mktime(&structTime);
+            if (timeValue == -1)
+            {
+                perror("Error converting time");
+                return 1;
+            }
+
+            for (int i = 0; i < filesNum; ++i)
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char data[6][1024];
+                int index = 0;
+                while (fgets(data[index], sizeof(data[index]), file) != NULL)
+                {
+                    index++;
+                }
+
+                if (difftime(files[i].modified_time, timeValue) < 0)
+                {
+                    for (int j = 0; j <= index; j++)
+                    {
+                        fputs(data[j], stdout);
+                    }
+                    fputs("\n--------------------\n", stdout);
+                }
+            }
+        }
+        else if (strcmp(argv[2], "-search") == 0)
+        {
+            char word[128];
+            strcpy(word, argv[3]);
+
+            for (int i = 0; i < filesNum; ++i)
+            {
+                char path[1024];
+                sprintf(path, "%s\\commitInfo.txt", files[i].name);
+
+                file = fopen(path, "r");
+                char data[6][1024];
+                int index = 0;
+                while (fgets(data[index], sizeof(data[index]), file) != NULL)
+                {
+                    index++;
+                }
+
+                if (strstr(data[1], word) != NULL)
+                {
+                    for (int j = 0; j <= index; j++)
+                    {
+                        fputs(data[j], stdout);
+                    }
+                    fputs("\n--------------------\n", stdout);
+                }
+            }
+        }
+    }
 }
