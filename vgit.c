@@ -59,6 +59,8 @@ int compare(const void *a, const void *b)
     return difftime(fileB->modified_time, fileA->modified_time);
 }
 
+int runBranch(int, const char **);
+
 // constant values
 const char settingsFolder[] = "C:\\Users\\admin\\Desktop\\settings";
 const char vgitMainSettings[] = "C:\\Users\\admin\\Desktop\\settings\\settings.txt";
@@ -170,6 +172,10 @@ int main(int argc, char const *argv[])
     else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "log") == 0)
     {
         runLog(argc, argv);
+    }
+    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "branch") == 0)
+    {
+        runBranch(argc, argv);
     }
 
     else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
@@ -455,6 +461,12 @@ int init()
     char shortcutMessageAddress[1024];
     sprintf(shortcutMessageAddress, "%s\\%s", repoFullAddrress, "shortcutMessage.txt");
 
+    char branchesAddress[1024];
+    sprintf(branchesAddress, "%s\\%s", repoFullAddrress, "branches.txt");
+
+    char currentBranchAddress[1024];
+    sprintf(currentBranchAddress, "%s\\%s", repoFullAddrress, "currentBranch.txt");
+
     char filesAddress[1024];
     sprintf(filesAddress, "%s\\%s", repoFullAddrress, "files");
 
@@ -465,7 +477,6 @@ int init()
     file = fopen(reposettingsAddrress, "w");
     fprintf(file, "UserName : \n");
     fprintf(file, "UserEmail : \n");
-    fprintf(file, "last commit ID : 0\n");
     fclose(file);
 
     // save repo Full Address
@@ -488,6 +499,14 @@ int init()
     fclose(file);
 
     file = fopen(shortcutMessageAddress, "w");
+    fclose(file);
+
+    file = fopen(branchesAddress, "w");
+    fprintf(file, "master\n");
+    fclose(file);
+
+    file = fopen(currentBranchAddress, "w");
+    fprintf(file, "master\n");
     fclose(file);
 
     mkdir(filesAddress);
@@ -1630,5 +1649,58 @@ int runLog(int argc, const char **argv)
                 }
             }
         }
+    }
+}
+
+int runBranch(int argc, const char **argv)
+{
+
+    if (argc < 2)
+    {
+        printf("please use the correct format");
+        return 1;
+    }
+
+    if (argc == 3)
+    {
+        int branchesNumber = lineCounter(".vgit\\branches.txt");
+        char branches[branchesNumber][1024];
+
+        file = fopen(".vgit\\branches.txt", "r");
+        for (int i = 0; i < branchesNumber; i++)
+        {
+            fgets(branches[i], sizeof(branches[i]), file);
+            branches[i][strlen(branches[i]) - 1] = '\0';
+
+            if (strcmp(branches[i], argv[2]) == 0)
+            {
+                printf("branch <%s> exists!", argv[2]);
+                fclose(file);
+                return 1;
+            }
+        }
+        fclose(file);
+
+        file = fopen(".vgit\\branches.txt", "a");
+        fprintf(file, "%s\n", argv[2]);
+        fclose(file);
+    }
+    else if (argc == 2)
+    {
+        char line[1024];
+        file = fopen(".vgit\\currentBranch.txt", "r");
+        while (fgets(line, sizeof(line), file) != NULL)
+        {
+            fprintf(stdout, "Current Branch : %s", line);
+        }
+        fclose(file);
+
+        file = fopen(".vgit\\branches.txt", "r");
+
+        while (fgets(line, sizeof(line), file) != NULL)
+        {
+            fputs(line, stdout);
+        }
+        fclose(file);
     }
 }
