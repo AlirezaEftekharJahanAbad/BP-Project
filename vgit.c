@@ -33,6 +33,7 @@ int removeFromStaging(char *, char const *, char const **);
 int undo(char *);
 
 void status(char *, char const **);
+int getLastCommitId();
 
 int runCommit(int, char const **);
 int incLastCommitId();
@@ -711,8 +712,7 @@ int addToStaging(char *workingDirectory, char const *path, char const **argv)
     return 0;
 }
 
-void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index, char const **argv)
-{
+void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index, char const **argv){
 
     char searchPath[MAX_PATH];
     WIN32_FIND_DATA findData;
@@ -727,10 +727,11 @@ void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *
     {
         do
         {
-            // Skip '.' and '..'
-            if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0)
+            
+            // Skip '.' and '..' and '.vgit'
+            if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0 && strcmp(findData.cFileName,".vgit") !=0)
             {
-
+                
                 // If it's a directory, recursively list files in it
                 if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                 {
@@ -742,6 +743,7 @@ void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *
                 {
                     strcpy(filesToStage[*index], findData.cFileName);
                     (*index)++;
+                    
 
                     if (strcmp(argv[1], "add") == 0)
                     {
@@ -978,9 +980,7 @@ int undo(char *workingDirectory)
     fclose(file);
 }
 
-void status(char *workingDirectory, char const **argv)
-
-{
+void status(char *workingDirectory, char const **argv){
 
     char repoStagingAddress[1024];
     sprintf(repoStagingAddress, "%s\\.vgit\\staging.txt", workingDirectory);
@@ -998,85 +998,102 @@ void status(char *workingDirectory, char const **argv)
     }
     fclose(file);
 
-    char repoundoControllerAddress[1024];
-    sprintf(repoundoControllerAddress, "%s\\.vgit\\undoController.txt", workingDirectory);
 
-    int filesDeletedFromStage = lineCounter(repoundoControllerAddress);
+    char repoFiles[128][1024];
+    int *repoIndex = (int *)malloc(1 * sizeof(int));
+    *repoIndex = 0;
 
-    char filesDeleted[filesDeletedFromStage][1024];
+    char repoDir[1024];
+    getcwd(repoDir,sizeof(repoDir));
+    
+    listFilesRecursively(repoDir, repoFiles, repoIndex, argv);
 
-    file = fopen(repoundoControllerAddress, "r");
 
-    for (int i = 0; i < filesDeletedFromStage; i++)
-    {
-        fgets(filesDeleted[i], sizeof(filesDeleted[i]), file);
-        filesDeleted[i][strlen(filesDeleted[i]) - 1] = '\0';
-    }
-    fclose(file);
-
-    char AllFiles[1024][1024];
+    char commitedFiles[128][1024];
     int *index = (int *)malloc(1 * sizeof(int));
     *index = 0;
 
-    char tempDirectory[1024];
-    getcwd(tempDirectory, sizeof(tempDirectory));
+    int commitId = getLastCommitId();
+    char lastCommitDir[1024];
+    sprintf(lastCommitDir, ".vgit\\commits\\%d", commitId);
 
-    listFilesRecursively(tempDirectory, AllFiles, index, argv);
+    listFilesRecursively(lastCommitDir, commitedFiles, index, argv);
 
-    // for (int i = 0; i < *index; i++)
-    // {
-    //     printf("%s\n",AllFiles[i]);
-    // }
-
-    for (int i = 0; i < stagedFilesNum; i++)
-    {
-        printf("%s +M\n", stagedFiles[i]);
-    }
-
-    printf("------------------------------\n");
-
-    char *configFiles[1024] = {"alias.txt", "settings.txt", "staging.txt", "undoController.txt"};
+    printf("------------Modified Files------------\n\n");
 
     for (int i = 0; i < *index; i++)
     {
-        int flag = 1;
-        for (int j = 0; j < 4; j++)
-        {
-            if (strcmp(AllFiles[i], configFiles[j]) == 0)
-            {
-                flag = 0;
-                break;
-            }
-        }
-        if (!flag)
-        {
-            strcpy(AllFiles[i], "\0");
-        }
-    }
+        int flag = 0;
 
-    for (int i = 0; i < *index; i++)
-    {
-        int flag = 1;
         for (int j = 0; j < stagedFilesNum; j++)
         {
-            if (strcmp(AllFiles[i], stagedFiles[j]) == 0)
+            if (strcmp(commitedFiles[i], stagedFiles[j]) == 0)
             {
-                flag = 0;
+                flag = 1;
                 break;
             }
         }
-        if (flag && strcmp(AllFiles[i], "\0") != 0)
+        if (flag == 1)
         {
-            printf("%s -A\n", AllFiles[i]);
+            printf("%s +M\n", commitedFiles[i]);
         }
     }
 
-    printf("------------------------------\n");
+    printf("------------Deleted Files------------\n\n");
 
-    for (int i = 0; i < filesDeletedFromStage; i++)
+    for (int i = 0; i < *index; i++)
     {
-        printf("%s -D\n", filesDeleted[i]);
+        int flag = 0;
+
+        for (int j = 0; j < *repoIndex; j++)
+        {
+            if (strcmp(commitedFiles[i], repoFiles[j]) == 0)
+            {
+                flag = 1;
+                break;
+            }
+        }
+        if (flag == 0 && strcmp(commitedFiles[i],"commitInfo.txt")!=0)
+        {
+            printf("%s -D\n", commitedFiles[i]);
+        }
     }
+
+        printf("------------Added Files------------\n\n");
+
+    for (int j = 0; j < stagedFilesNum; j++)
+    {
+        int flag = 0;
+
+        for (int i = 0; i < *index; i++)
+        {
+            if (strcmp(stagedFiles[j], commitedFiles[i]) == 0)
+            {
+                flag = 1;
+                break;
+            }
+        }
+        if (flag == 0)
+        {
+            printf("%s +A\n", stagedFiles[j]);
+        }
+    }
+}
+
+// returns new commit_ID
+int getLastCommitId()
+{
+    FILE *file = fopen(".vgit\\lastCommitId.txt", "r");
+    if (file == NULL)
+        return -1;
+
+    int lastCommitId;
+
+    fscanf(file, "last commit ID : %d\n", &lastCommitId);
+
+    fclose(file);
+
+    return lastCommitId;
 }
 
 int runCommit(int argc, char const **argv)
@@ -1197,9 +1214,14 @@ int runCommit(int argc, char const **argv)
     time_t now;
     time(&now);
     char userName[128];
+    char branchName[128];
 
     file = fopen(".vgit\\settings.txt", "r");
     fgets(userName, sizeof(userName), file);
+    fclose(file);
+
+    file = fopen(".vgit\\currentBranch.txt", "r");
+    fgets(branchName, sizeof(branchName), file);
     fclose(file);
 
     file = fopen(commitInfo, "w");
@@ -1207,7 +1229,7 @@ int runCommit(int argc, char const **argv)
     fprintf(file, "commit Message : %s\n", message);
     fputs(userName, file);
     fprintf(file, "commit Id : %d\n", commitId);
-    fprintf(file, "branch : \n");
+    fprintf(file, "branch : %s", branchName);
     fprintf(file, "files Number : %d\n", filesNumber);
     fclose(file);
 
