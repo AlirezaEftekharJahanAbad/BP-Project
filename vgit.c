@@ -8,15 +8,15 @@
 #include <time.h>
 
 // functions prototypes
-int init(void);              // init function
+int init();                  // init function
 int doesFolderExist(char *); // check folder existence for init function error handling
 
 void MainSettings(void); // creates settings folder for vgit
 
-void globalNameConfig(const char *New_Value);  // save global username in main settings
-void globalEmailConfig(const char *New_Value); // save global useremail in main settings
+void globalNameConfig(const char *);  // save global username in main settings
+void globalEmailConfig(const char *); // save global useremail in main settings
 void globalAliasConfig(const char *, const char *);
-void projectsGlobalConfig();                                      // save username and useremail in every repo settings
+
 void projectLocalNameConfig(char *, const char *);                // save username in repo settings
 void projectLocalEmailConfig(char *, const char *);               // save useremail in repo settings
 void projectLocalAliasConfig(char *, const char *, const char *); // save alias in repo settings
@@ -64,7 +64,6 @@ int runBranch(int, const char **);
 
 // constant values
 const char settingsFolder[] = "C:\\Users\\admin\\Desktop\\settings";
-const char vgitMainSettings[] = "C:\\Users\\admin\\Desktop\\settings\\settings.txt";
 const char vgitMainProjects[] = "C:\\Users\\admin\\Desktop\\settings\\projects.txt";
 const char vgitMainAlias[] = "C:\\Users\\admin\\Desktop\\settings\\alias.txt";
 
@@ -86,102 +85,111 @@ int main(int argc, char const *argv[])
     {
         init();
     }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "config") == 0 && strcmp(argv[2], "--global") == 0)
+    else
     {
-        if (strcmp(argv[3], "user.name") == 0)
+        int folderExistence = doesFolderExist(".vgit");
+        if (folderExistence == 1)
         {
-            globalNameConfig(argv[4]);
-            projectsGlobalConfig();
-        }
-        else if (strcmp(argv[3], "user.email") == 0)
-        {
-            globalEmailConfig(argv[4]);
-            projectsGlobalConfig();
-        }
-        else if (strncmp(argv[3], "alias", 5) == 0)
-        {
-            globalAliasConfig(argv[3], argv[4]);
-        }
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "config") == 0)
-    {
-        if (strcmp(argv[2], "user.name") == 0)
-        {
-            projectLocalNameConfig(workingDirectory, argv[3]);
-        }
-        else if (strcmp(argv[2], "user.email") == 0)
-        {
-            projectLocalEmailConfig(workingDirectory, argv[3]);
-        }
-        else if (strncmp(argv[2], "alias", 5) == 0)
-        {
-            projectLocalAliasConfig(workingDirectory, argv[2], argv[3]);
-        }
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "add") == 0)
-    {
-        if (strcmp(argv[2], "-f") != 0)
-        {
-            runAdd(workingDirectory, argv[2], argv);
-        }
-        else if (strcmp(argv[2], "-f") == 0)
-        {
-            for (int i = 3; i < argc; i++)
+            if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "config") == 0 && strcmp(argv[2], "--global") == 0)
             {
-                runAdd(workingDirectory, argv[i], argv);
+                if (strcmp(argv[3], "user.name") == 0)
+                {
+                    globalNameConfig(argv[4]);
+                }
+                else if (strcmp(argv[3], "user.email") == 0)
+                {
+                    globalEmailConfig(argv[4]);
+                }
+                else if (strncmp(argv[3], "alias", 5) == 0)
+                {
+                    globalAliasConfig(argv[3], argv[4]);
+                }
             }
-        }
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "reset") == 0)
-    {
-        if (strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-undo") != 0)
-        {
-            runReset(workingDirectory, argv[2], argv);
-        }
-        else if (strcmp(argv[2], "-f") == 0)
-        {
-            for (int i = 3; i < argc; i++)
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "config") == 0)
             {
-                runReset(workingDirectory, argv[i], argv);
+                if (strcmp(argv[2], "user.name") == 0)
+                {
+                    projectLocalNameConfig(workingDirectory, argv[3]);
+                }
+                else if (strcmp(argv[2], "user.email") == 0)
+                {
+                    projectLocalEmailConfig(workingDirectory, argv[3]);
+                }
+                else if (strncmp(argv[2], "alias", 5) == 0)
+                {
+                    projectLocalAliasConfig(workingDirectory, argv[2], argv[3]);
+                }
             }
-        }
-        else if (strcmp(argv[2], "-undo") == 0)
-        {
-            undo(workingDirectory);
-        }
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "status") == 0)
-    {
-        status(workingDirectory, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "commit") == 0)
-    {
-        runCommit(argc, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "set") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
-    {
-        setShortcutMessage(argc, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "replace") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
-    {
-        replaceShortcutMessage(argc, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "remove") == 0 && strcmp(argv[2], "-s") == 0)
-    {
-        removeShortcutMessage(argc, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "log") == 0)
-    {
-        runLog(argc, argv);
-    }
-    else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "branch") == 0)
-    {
-        runBranch(argc, argv);
-    }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "add") == 0)
+            {
+                if (strcmp(argv[2], "-f") != 0)
+                {
+                    runAdd(workingDirectory, argv[2], argv);
+                }
+                else if (strcmp(argv[2], "-f") == 0)
+                {
+                    for (int i = 3; i < argc; i++)
+                    {
+                        runAdd(workingDirectory, argv[i], argv);
+                    }
+                }
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "reset") == 0)
+            {
+                if (strcmp(argv[2], "-f") != 0 && strcmp(argv[2], "-undo") != 0)
+                {
+                    runReset(workingDirectory, argv[2], argv);
+                }
+                else if (strcmp(argv[2], "-f") == 0)
+                {
+                    for (int i = 3; i < argc; i++)
+                    {
+                        runReset(workingDirectory, argv[i], argv);
+                    }
+                }
+                else if (strcmp(argv[2], "-undo") == 0)
+                {
+                    undo(workingDirectory);
+                }
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "status") == 0)
+            {
+                status(workingDirectory, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "commit") == 0)
+            {
+                runCommit(argc, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "set") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+            {
+                setShortcutMessage(argc, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "replace") == 0 && strcmp(argv[2], "-m") == 0 && strcmp(argv[4], "-s") == 0)
+            {
+                replaceShortcutMessage(argc, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "remove") == 0 && strcmp(argv[2], "-s") == 0)
+            {
+                removeShortcutMessage(argc, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "log") == 0)
+            {
+                runLog(argc, argv);
+            }
+            else if (strcmp(argv[0], "vgit") == 0 && strcmp(argv[1], "branch") == 0)
+            {
+                runBranch(argc, argv);
+            }
 
-    else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
-    {
-        aliasChecker(workingDirectory, argv[1]);
+            else if (strcmp(argv[0], "vgit") == 0 && argc == 2)
+            {
+                aliasChecker(workingDirectory, argv[1]);
+            }
+        }
+        else
+        {
+            printf("Can't run this command out of repository!");
+        }
     }
 
     return 0;
@@ -191,33 +199,73 @@ int main(int argc, char const *argv[])
 void globalNameConfig(const char *NewValue)
 {
 
-    char prevSettings[2][1024];
+    int repoCount;
+    char projects[1024][1024];
 
-    file = fopen(vgitMainSettings, "r");
-    fgets(prevSettings[0], 1024, file);
-    fgets(prevSettings[1], 1024, file);
+    repoCount = lineCounter(vgitMainProjects);
+
+    file = fopen(vgitMainProjects, "r");
+    for (int i = 0; i < repoCount; i++)
+    {
+        fgets(projects[i], 1024, file);
+        projects[i][strlen(projects[i]) - 1] = '\0';
+    }
     fclose(file);
 
-    file = fopen(vgitMainSettings, "w");
-    fprintf(file, "UserName : %s\n", NewValue);
-    fputs(prevSettings[1], file);
-    fclose(file);
+    for (int i = 0; i < repoCount; i++)
+    {
+
+        char tempRepoSettingsPath[1024];
+        sprintf(tempRepoSettingsPath, "%s\\settings.txt", projects[i]);
+
+        char prevSettings[2][1024];
+
+        file = fopen(tempRepoSettingsPath, "r");
+        fgets(prevSettings[0], 1024, file);
+        fgets(prevSettings[1], 1024, file);
+        fclose(file);
+
+        file = fopen(tempRepoSettingsPath, "w");
+        fprintf(file, "UserNmail : %s\n", NewValue);
+        fputs(prevSettings[1], file);
+        fclose(file);
+    }
 }
 
 void globalEmailConfig(const char *NewValue)
 {
 
-    char prevSettings[2][1024];
+    int repoCount;
+    char projects[1024][1024];
 
-    file = fopen(vgitMainSettings, "r");
-    fgets(prevSettings[0], 1024, file);
-    fgets(prevSettings[1], 1024, file);
+    repoCount = lineCounter(vgitMainProjects);
+
+    file = fopen(vgitMainProjects, "r");
+    for (int i = 0; i < repoCount; i++)
+    {
+        fgets(projects[i], 1024, file);
+        projects[i][strlen(projects[i]) - 1] = '\0';
+    }
     fclose(file);
 
-    file = fopen(vgitMainSettings, "w");
-    fputs(prevSettings[0], file);
-    fprintf(file, "UserEmail : %s\n", NewValue);
-    fclose(file);
+    for (int i = 0; i < repoCount; i++)
+    {
+
+        char tempRepoSettingsPath[1024];
+        sprintf(tempRepoSettingsPath, "%s\\settings.txt", projects[i]);
+
+        char prevSettings[2][1024];
+
+        file = fopen(tempRepoSettingsPath, "r");
+        fgets(prevSettings[0], 1024, file);
+        fgets(prevSettings[1], 1024, file);
+        fclose(file);
+
+        file = fopen(tempRepoSettingsPath, "w");
+        fputs(prevSettings[0], file);
+        fprintf(file, "UserEmail : %s\n", NewValue);
+        fclose(file);
+    }
 }
 
 void globalAliasConfig(const char *aliasName, const char *command)
@@ -248,41 +296,6 @@ void globalAliasConfig(const char *aliasName, const char *command)
 
         file = fopen(tempRepoAliasPath, "a");
         fprintf(file, "%s : %s\n", aliasName + 6, command);
-        fclose(file);
-    }
-}
-
-void projectsGlobalConfig()
-{
-
-    int repoCount;
-    char projects[1024][1024];
-
-    repoCount = lineCounter(vgitMainProjects);
-
-    file = fopen(vgitMainProjects, "r");
-    for (int i = 0; i < repoCount; i++)
-    {
-        fgets(projects[i], 1024, file);
-        projects[i][strlen(projects[i]) - 1] = '\0';
-    }
-    fclose(file);
-
-    for (int i = 0; i < repoCount; i++)
-    {
-
-        char tempRepoSettingsPath[1024];
-        sprintf(tempRepoSettingsPath, "%s\\settings.txt", projects[i]);
-
-        char Data[2][1024];
-        file = fopen(vgitMainSettings, "r");
-        fgets(Data[0], 1024, file);
-        fgets(Data[1], 1024, file);
-        fclose(file);
-
-        file = fopen(tempRepoSettingsPath, "w");
-        fputs(Data[0], file);
-        fputs(Data[1], file);
         fclose(file);
     }
 }
@@ -334,8 +347,7 @@ void projectLocalAliasConfig(char *workingDirectory, const char *aliasName, cons
 }
 
 // checks if alias exists
-void aliasChecker(char *workingDirectory, const char *command)
-{
+void aliasChecker(char *workingDirectory, const char *command){
     char aliasTxtFilePath[1024];
     sprintf(aliasTxtFilePath, "%s\\.vgit\\alias.txt", workingDirectory);
 
@@ -399,13 +411,6 @@ void MainSettings()
 
         mkdir(settingsFolder);
 
-        // creating settings.txt
-        chdir(settingsFolder);
-        file = fopen(vgitMainSettings, "w");
-        fprintf(file, "UserName : \n");
-        fprintf(file, "UserEmail : \n");
-        fclose(file);
-
         // creating projects.txt
         file = fopen(vgitMainProjects, "w");
         fprintf(file, "");
@@ -431,7 +436,7 @@ int init()
 
     if (vgitExistence == 1)
     {
-        return 0;
+        printf("cannot create directory '.vgit': File exists\n");
     }
     else
     {
@@ -461,6 +466,9 @@ int init()
 
     char shortcutMessageAddress[1024];
     sprintf(shortcutMessageAddress, "%s\\%s", repoFullAddrress, "shortcutMessage.txt");
+
+    char lastCommitIdAddress[1024];
+    sprintf(lastCommitIdAddress, "%s\\%s", repoFullAddrress, "lastCommitId.txt");
 
     char branchesAddress[1024];
     sprintf(branchesAddress, "%s\\%s", repoFullAddrress, "branches.txt");
@@ -502,6 +510,10 @@ int init()
     file = fopen(shortcutMessageAddress, "w");
     fclose(file);
 
+    file = fopen(lastCommitIdAddress, "w");
+    fprintf(file, "last commit ID : 0\n");
+    fclose(file);
+
     file = fopen(branchesAddress, "w");
     fprintf(file, "master\n");
     fclose(file);
@@ -529,7 +541,7 @@ int doesFolderExist(char *folderName)
         sprintf(folderPath, "%s\\%s", currentDir, folderName);
         if (stat(folderPath, &st) == 0 && S_ISDIR(st.st_mode))
         {
-            printf("cannot create directory '.vgit': File exists\n");
+
             return 1;
         }
 
@@ -544,7 +556,6 @@ int doesFolderExist(char *folderName)
             sprintf(folderPath, "%s\\%s", currentDir, folderName);
             if (stat(folderPath, &st) == 0 && S_ISDIR(st.st_mode))
             {
-                printf("cannot create directory '.vgit': Folder exists\n");
                 return 1;
             }
             return 0;
@@ -555,7 +566,6 @@ int doesFolderExist(char *folderName)
 int runAdd(char *workingDirectory, char const *path, char const **argv)
 {
 
-    // TODO: handle command in non-root directories
     if (path == 0)
     {
         printf("please specify a file or a dirctory");
@@ -712,7 +722,8 @@ int addToStaging(char *workingDirectory, char const *path, char const **argv)
     return 0;
 }
 
-void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index, char const **argv){
+void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *index, char const **argv)
+{
 
     char searchPath[MAX_PATH];
     WIN32_FIND_DATA findData;
@@ -727,11 +738,11 @@ void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *
     {
         do
         {
-            
+
             // Skip '.' and '..' and '.vgit'
-            if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0 && strcmp(findData.cFileName,".vgit") !=0)
+            if (strcmp(findData.cFileName, ".") != 0 && strcmp(findData.cFileName, "..") != 0 && strcmp(findData.cFileName, ".vgit") != 0)
             {
-                
+
                 // If it's a directory, recursively list files in it
                 if (findData.dwFileAttributes & FILE_ATTRIBUTE_DIRECTORY)
                 {
@@ -743,7 +754,6 @@ void listFilesRecursively(const char *basePath, char filesToStage[][1024], int *
                 {
                     strcpy(filesToStage[*index], findData.cFileName);
                     (*index)++;
-                    
 
                     if (strcmp(argv[1], "add") == 0)
                     {
@@ -980,7 +990,8 @@ int undo(char *workingDirectory)
     fclose(file);
 }
 
-void status(char *workingDirectory, char const **argv){
+void status(char *workingDirectory, char const **argv)
+{
 
     char repoStagingAddress[1024];
     sprintf(repoStagingAddress, "%s\\.vgit\\staging.txt", workingDirectory);
@@ -998,16 +1009,14 @@ void status(char *workingDirectory, char const **argv){
     }
     fclose(file);
 
-
     char repoFiles[128][1024];
     int *repoIndex = (int *)malloc(1 * sizeof(int));
     *repoIndex = 0;
 
     char repoDir[1024];
-    getcwd(repoDir,sizeof(repoDir));
-    
-    listFilesRecursively(repoDir, repoFiles, repoIndex, argv);
+    getcwd(repoDir, sizeof(repoDir));
 
+    listFilesRecursively(repoDir, repoFiles, repoIndex, argv);
 
     char commitedFiles[128][1024];
     int *index = (int *)malloc(1 * sizeof(int));
@@ -1053,13 +1062,13 @@ void status(char *workingDirectory, char const **argv){
                 break;
             }
         }
-        if (flag == 0 && strcmp(commitedFiles[i],"commitInfo.txt")!=0)
+        if (flag == 0 && strcmp(commitedFiles[i], "commitInfo.txt") != 0)
         {
             printf("%s -D\n", commitedFiles[i]);
         }
     }
 
-        printf("------------Added Files------------\n\n");
+    printf("------------Added Files------------\n\n");
 
     for (int j = 0; j < stagedFilesNum; j++)
     {
